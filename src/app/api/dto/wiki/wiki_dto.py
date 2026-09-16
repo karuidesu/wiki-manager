@@ -69,22 +69,3 @@ class ArticleResponseDTO(BaseModel):
 
 class AddCommentDTO(BaseModel):
     content: comment_str = Field(...)
-
-
-class ReactionResponseDTO(BaseModel):
-    article_id: str = Field(...)
-    user_id: str = Field(...)
-    is_like: bool = Field(...)
-    created_at: datetime = Field(...)
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CommentResponseDTO(BaseModel):
-    comment_id: str = Field(...)
-    article_id: str = Field(...)
-    content: str = Field(...)
-    created_by: str = Field(...)
-    created_at: datetime = Field(...)
-
-    model_config = ConfigDict(from_attributes=True)

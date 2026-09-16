@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
 from starlette.responses import Response
@@ -43,7 +43,9 @@ async def create_article(
         )
         return ORJSONResponse(
             status_code=HTTP_201_CREATED,
-            content=article.model_dump() if hasattr(article, "model_dump") else article,
+            content=(
+                article.model_dump() if hasattr(article, "model_dump") else article
+            ),
         )
     except ApiException as exc:
         LOGGER.error(f"Error creating new article: {exc}")
@@ -66,7 +68,9 @@ async def read_article(
         article = await wiki_services.article_service.get_article(article_id)
         return ORJSONResponse(
             status_code=HTTP_200_OK,
-            content=article.model_dump() if hasattr(article, "model_dump") else article,
+            content=(
+                article.model_dump() if hasattr(article, "model_dump") else article
+            ),
         )
     except ApiException as exc:
         LOGGER.error(f"Error getting article: {exc}")
@@ -79,7 +83,7 @@ async def read_article(
         )
 
 
-@router.get("/list", response_model=List[ArticleResponseDTO])
+@router.get("/list", response_model=Dict[str, Any])
 async def get_all_articles(
     page_size: int = 1,
     max_results: int = 20,
@@ -95,7 +99,6 @@ async def get_all_articles(
             status_code=HTTP_200_OK,
             content=articles_data,
         )
-
     except ApiException as exc:
         LOGGER.error(f"Error getting articles list: {exc}")
         return ORJSONResponse(status_code=exc.status_code, content=exc.message)
@@ -120,7 +123,9 @@ async def update_article(
         )
         return ORJSONResponse(
             status_code=HTTP_200_OK,
-            content=article.model_dump() if hasattr(article, "model_dump") else article,
+            content=(
+                article.model_dump() if hasattr(article, "model_dump") else article
+            ),
         )
     except ApiException as exc:
         LOGGER.error(f"Error resubmitting article: {exc}")
@@ -146,7 +151,9 @@ async def request_correction_article(
         )
         return ORJSONResponse(
             status_code=HTTP_200_OK,
-            content=article.model_dump() if hasattr(article, "model_dump") else article,
+            content=(
+                article.model_dump() if hasattr(article, "model_dump") else article
+            ),
         )
     except ApiException as exc:
         LOGGER.error(f"Error requesting correction: {exc}")
@@ -169,7 +176,9 @@ async def publish_article(
         article = await wiki_services.article_service.publish(article_id, auth_user)
         return ORJSONResponse(
             status_code=HTTP_200_OK,
-            content=article.model_dump() if hasattr(article, "model_dump") else article,
+            content=(
+                article.model_dump() if hasattr(article, "model_dump") else article
+            ),
         )
     except ApiException as exc:
         LOGGER.error(f"Error publishing article: {exc}")
@@ -190,9 +199,7 @@ async def delete_article(
 ):
     try:
         await wiki_services.article_service.delete_article(article_id, auth_user)
-        return Response(
-            status_code=HTTP_204_NO_CONTENT,
-        )
+        return Response(status_code=HTTP_204_NO_CONTENT)
     except ApiException as exc:
         LOGGER.error(f"Error deleting article: {exc}")
         return ORJSONResponse(status_code=exc.status_code, content=exc.message)
@@ -234,7 +241,9 @@ async def like_article(
 
 
 @router.post(
-    "/{article_id}/dislike", response_model=Dict[str, Any], status_code=HTTP_201_CREATED
+    "/{article_id}/dislike",
+    response_model=Dict[str, Any],
+    status_code=HTTP_201_CREATED,
 )
 async def dislike_article(
     article_id: str,
@@ -282,7 +291,7 @@ async def cancel_reaction(
         )
 
 
-@router.get("/{article_id}/reactions/list", response_model=List[Dict[str, Any]])
+@router.get("/{article_id}/reactions/list", response_model=Dict[str, Any])
 async def load_reactions(
     article_id: str,
     page_size: int = 1,
@@ -314,7 +323,9 @@ async def load_reactions(
 
 
 @router.post(
-    "/{article_id}/comment", response_model=Dict[str, Any], status_code=HTTP_201_CREATED
+    "/{article_id}/comment",
+    response_model=Dict[str, Any],
+    status_code=HTTP_201_CREATED,
 )
 async def add_comment(
     article_id: str,
@@ -328,7 +339,9 @@ async def add_comment(
         )
         return ORJSONResponse(
             status_code=HTTP_201_CREATED,
-            content=comment.model_dump() if hasattr(comment, "model_dump") else comment,
+            content=(
+                comment.model_dump() if hasattr(comment, "model_dump") else comment
+            ),
         )
     except ApiException as exc:
         LOGGER.error(f"Error adding comment: {exc}")
@@ -341,7 +354,7 @@ async def add_comment(
         )
 
 
-@router.get("/{article_id}/comments", response_model=List[Dict[str, Any]])
+@router.get("/{article_id}/comments", response_model=Dict[str, Any])
 async def load_comments(
     article_id: str,
     page_size: int = 1,

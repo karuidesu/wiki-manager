@@ -30,7 +30,11 @@ class SelectQueryBuilder:
         self._offset = offset
         self._limit = limit
         self._order_by = order_by
-        self._order_dir = order_dir.upper()
+
+        normalized_dir = order_dir.strip().upper()
+        if normalized_dir not in ("ASC", "DESC"):
+            raise ValueError("order_dir must be strictly 'ASC' or 'DESC'")
+        self._order_dir = normalized_dir
 
         if selected_columns is None:
             self._selected_columns: str | list[str] = list(self._model_columns)
@@ -54,8 +58,8 @@ class SelectQueryBuilder:
 
         if self._order_by and self._order_by not in self._model_columns:
             raise ValueError(
-                f"ORDER BY column '{self._order_by}"
-                f"does not exist in model' {model_cls.__name__}"
+                f"Order by column '{self._order_by}' "
+                f"does not exist in model {model_cls.__name__}"
             )
 
     def sql_query(self) -> tuple[str, list[Any]]:
@@ -69,24 +73,24 @@ class SelectQueryBuilder:
 
         if self._where_clauses:
             where_parts = []
-            for idx, (col, val) in enumerate(self._where_clauses.items(), start=1):
-                where_parts.append(f"{col} = ${idx}")
-                params.append(val)
+            for col, val in self._where_clauses.items():
+                if val is None:
+                    where_parts.append(f"{col} IS NULL")
+                else:
+                    params.append(val)
+                    where_parts.append(f"{col} = ${len(params)}")
             query += f" WHERE {' AND '.join(where_parts)}"
 
         if self._order_by:
-            dir_str = "ASC" if self._order_dir == "ASC" else "DESC"
-            query += f" ORDER BY {self._order_by} {dir_str}"
+            query += f" ORDER BY {self._order_by} {self._order_dir}"
 
-        param_idx = len(params) + 1
         if self._limit is not None:
-            query += f" LIMIT ${param_idx}"
             params.append(self._limit)
-            param_idx += 1
+            query += f" LIMIT ${len(params)}"
 
         if self._offset is not None:
-            query += f" OFFSET ${param_idx}"
             params.append(self._offset)
+            query += f" OFFSET ${len(params)}"
 
         return query, params
 
@@ -96,7 +100,7 @@ class InsertQueryBuilder:
         self, model_cls: Type[SQLModel], explicit_columns: list[str] | None = None
     ):
         self._model_cls = model_cls
-        table = model_cls.__table__  # pyrefly: ignore [missing-attribute]
+        table = model_cls.__table__
         self._table_name = table.name
 
         if explicit_columns:
@@ -122,7 +126,7 @@ class UpdateQueryBuilder:
         manage_version: bool = True,
     ):
         self._model_cls = model_cls
-        table = model_cls.__table__  # pyrefly: ignore [missing-attribute]
+        table = model_cls.__table__
         self._table_name = table.name
         self._updated_fields = updated_fields
         self._where_fields = where_fields
@@ -157,7 +161,7 @@ class UpdateQueryBuilder:
 
 class DeleteQueryBuilder:
     def __init__(self, model_cls: Type[SQLModel], where_clauses: dict[str, Any]):
-        table = model_cls.__table__  # pyrefly: ignore [missing-attribute]
+        table = model_cls.__table__
         self._table_name = table.name
         self._column_names = {col.name for col in table.columns}
         self._where_clauses = where_clauses or {}
@@ -174,9 +178,12 @@ class DeleteQueryBuilder:
 
         conditions = []
         params: list[Any] = []
-        for idx, (col, val) in enumerate(self._where_clauses.items(), start=1):
-            conditions.append(f"{col} = ${idx}")
-            params.append(val)
+        for col, val in self._where_clauses.items():
+            if val is None:
+                conditions.append(f"{col} IS NULL")
+            else:
+                params.append(val)
+                conditions.append(f"{col} = ${len(params)}")
 
         sql = f"DELETE FROM {self._table_name} WHERE {' AND '.join(conditions)}"
         return sql, params

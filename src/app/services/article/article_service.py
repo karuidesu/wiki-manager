@@ -10,7 +10,14 @@ from starlette.status import (
 
 from app.core.exceptions.api_exception import ApiErrorsCode, ApiException
 from app.models.security.auth_user import AuthenticatedUser
-from app.models.wiki.wiki_models import Article, ArticleReaction, Comment, Status
+from app.models.wiki.wiki_models import (
+    Article,
+    ArticleReaction,
+    Comment,
+    ReactionType,
+    Status,
+)
+from app.security.api_roles import ApiRoles
 from app.storage.rds.datastore.interfaces.article import IArticle
 from app.storage.rds.datastore.interfaces.category import ICategory
 from app.storage.rds.datastore.interfaces.media import IMedia
@@ -232,9 +239,9 @@ class ArticleService:
         )
 
         if existing:
-            if existing.reaction == "LIKE":
+            if existing.reaction == ReactionType.LIKE:
                 return existing
-            existing.reaction = "LIKE"
+            existing.reaction = ReactionType.LIKE
             existing.updated_by = auth_user.user_id
             existing.updated_at = datetime.now(timezone.utc)
             return await self._article_store.save_reaction(
@@ -245,7 +252,7 @@ class ArticleService:
             reaction_id=str(uuid.uuid4()),
             article_id=article.article_id,
             user_id=auth_user.user_id,
-            reaction="LIKE",
+            reaction=ReactionType.LIKE,
             created_by=auth_user.user_id,
             created_at=datetime.now(timezone.utc),
             version=1,
@@ -259,9 +266,9 @@ class ArticleService:
         )
 
         if existing:
-            if existing.reaction == "DISLIKE":
+            if existing.reaction == ReactionType.DISLIKE:
                 return existing
-            existing.reaction = "DISLIKE"
+            existing.reaction = ReactionType.DISLIKE
             existing.updated_by = auth_user.user_id
             existing.updated_at = datetime.now(timezone.utc)
             return await self._article_store.save_reaction(
@@ -272,7 +279,7 @@ class ArticleService:
             reaction_id=str(uuid.uuid4()),
             article_id=article.article_id,
             user_id=auth_user.user_id,
-            reaction="DISLIKE",
+            reaction=ReactionType.DISLIKE,
             created_by=auth_user.user_id,
             created_at=datetime.now(timezone.utc),
             version=1,
@@ -289,8 +296,8 @@ class ArticleService:
         if not existing:
             return
 
-        like = -1 if existing.reaction == "LIKE" else 0
-        dislike = -1 if existing.reaction == "DISLIKE" else 0
+        like = -1 if existing.reaction == ReactionType.LIKE else 0
+        dislike = -1 if existing.reaction == ReactionType.DISLIKE else 0
 
         await self._article_store.cancel_reaction(
             reaction=existing,
@@ -329,7 +336,6 @@ class ArticleService:
         comment = Comment(
             comment_id=str(uuid.uuid4()),
             article_id=article.article_id,
-            user_id=auth_user.user_id,
             created_by=auth_user.user_id,
             content=payload["content"],
             created_at=datetime.now(timezone.utc),
@@ -373,10 +379,13 @@ class ArticleService:
                 message="Comment not found.",
             )
 
-        comment_owner = getattr(
-            comment, "created_by", getattr(comment, "user_id", None)
+        comment_owner = getattr(comment, "created_by", None)
+        user_roles = getattr(auth_user, "roles", [])
+
+        is_admin = any(
+            role in user_roles for role in [ApiRoles.MANAGER, ApiRoles.DIRECTOR]
         )
-        if comment_owner != auth_user.user_id:
+        if comment_owner != auth_user.user_id and not is_admin:
             raise ApiException(
                 status_code=HTTP_403_FORBIDDEN,
                 error_code=ApiErrorsCode.FORBIDDEN,

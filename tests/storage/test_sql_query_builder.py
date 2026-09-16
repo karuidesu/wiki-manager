@@ -12,6 +12,7 @@ from app.storage.rds.commons.sql_query_builder import (
 
 
 class User(SQLModel, table=True):
+    # pyrefly: ignore [bad-override]
     __tablename__: str = "users"
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -49,13 +50,15 @@ def test_select_builder_success(mock_pool: None) -> None:
     assert "username = $1" in sql or "username = $2" in sql
     assert "email = $1" in sql or "email = $2" in sql
     assert "ORDER BY username ASC" in sql
-    assert "LIMIT 10" in sql
-    assert "OFFSET 5" in sql
+    assert "LIMIT $3" in sql
+    assert "OFFSET $4" in sql
     assert "Alice" not in sql
     assert "alice@example.com" not in sql
-    assert params == ["Alice", "alice@example.com"] or params == [
+    assert params == ["Alice", "alice@example.com", 10, 5] or params == [
         "alice@example.com",
         "Alice",
+        10,
+        5,
     ]
 
 
@@ -96,7 +99,7 @@ def test_insert_builder_success() -> None:
     assert sql.startswith("INSERT INTO users")
     assert "$1" in sql
     assert "$2" in sql
-    assert "id" not in columns
+    assert "id" in columns
     assert "username" in columns
     assert "email" in columns
 
