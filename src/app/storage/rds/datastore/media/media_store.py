@@ -41,7 +41,7 @@ class MediaStore(IMedia):
                 model_cls=Media,
                 where_clauses={"media_id": media_id},
             )
-            load_media_sql, params = query_builder.build_query()
+            load_media_sql, params = query_builder.sql_query()
 
             async with self._database_manager.connection_pool.acquire() as connection:
                 async with connection.transaction():
@@ -87,7 +87,7 @@ class MediaStore(IMedia):
                 order_dir=direction or "DESC",
             )
 
-            load_medias_sql, params = query_builder.build_query()
+            load_medias_sql, params = query_builder.sql_query()
 
             async with self._database_manager.connection_pool.acquire() as connection:
                 async with connection.transaction():

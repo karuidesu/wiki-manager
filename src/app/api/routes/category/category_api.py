@@ -1,4 +1,5 @@
 import logging
+from typing import List
 
 from fastapi import APIRouter, Depends
 from starlette.responses import Response
@@ -9,7 +10,11 @@ from starlette.status import (
     HTTP_500_INTERNAL_SERVER_ERROR,
 )
 
-from app.api.dto.wiki.wiki_dto import CreateCategoryDTO, UpdateCategoryDTO
+from app.api.dto.wiki.wiki_dto import (
+    CategoryResponseDTO,
+    CreateCategoryDTO,
+    UpdateCategoryDTO,
+)
 from app.core.exceptions.api_exception import ApiException
 from app.core.json.json_response import ORJSONResponse
 from app.models.security.auth_user import AuthenticatedUser
@@ -24,7 +29,9 @@ LOGGER = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/create")
+@router.post(
+    "/create", response_model=CategoryResponseDTO, status_code=HTTP_201_CREATED
+)
 async def create_category(
     category_request: CreateCategoryDTO,
     wiki_services: WikiManagerServices = Depends(WIKI_MANAGER_FACTORY),
@@ -49,7 +56,7 @@ async def create_category(
         )
 
 
-@router.get("/read/{category_id}")
+@router.get("/read/{category_id}", response_model=CategoryResponseDTO)
 async def read_category(
     category_id: str,
     wiki_services: WikiManagerServices = Depends(WIKI_MANAGER_FACTORY),
@@ -74,7 +81,7 @@ async def read_category(
         )
 
 
-@router.get("/list")
+@router.get("/list", response_model=List[CategoryResponseDTO])
 async def get_all_categories_list(
     index_size: int = 1,
     max_results: int = 20,
@@ -110,15 +117,16 @@ async def get_all_categories_list(
         )
 
 
-@router.put("/update")
+@router.put("/update", status_code=HTTP_204_NO_CONTENT)
 async def update_category(
+    category_id: str,
     category_request: UpdateCategoryDTO,
     wiki_services: WikiManagerServices = Depends(WIKI_MANAGER_FACTORY),
     auth_user: AuthenticatedUser = Depends(AUTHENTICATION_PROVIDER),
 ):
     try:
         await wiki_services.category_service.update_category(
-            auth_user, category_request
+            auth_user, category_id, category_request
         )
         return Response(
             status_code=HTTP_204_NO_CONTENT,
@@ -134,7 +142,7 @@ async def update_category(
         )
 
 
-@router.delete("/delete")
+@router.delete("/delete/{category_id}", status_code=HTTP_204_NO_CONTENT)
 async def delete_category(
     category_id: str,
     wiki_services: WikiManagerServices = Depends(WIKI_MANAGER_FACTORY),

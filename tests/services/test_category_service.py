@@ -14,7 +14,7 @@ from app.storage.rds.datastore.interfaces.category import ICategory
 @pytest.fixture
 def mock_category_store():
     store = MagicMock(spec=ICategory)
-    store.get_by_title = AsyncMock(return_value=None)
+    store.get_category_by_title = AsyncMock(return_value=None)
     return store
 
 
@@ -52,18 +52,18 @@ async def test_create_category_success(
         version=1,
     )
 
-    mock_category_store.get_by_title = AsyncMock(return_value=None)
-    mock_category_store.create = AsyncMock(return_value=expected_category)
+    mock_category_store.get_category_by_title = AsyncMock(return_value=None)
+    mock_category_store.create_category = AsyncMock(return_value=expected_category)
 
     result = await category_service.create_category(mock_auth_user, dto)
 
-    assert result.title == "Tech"
-    assert result.created_by == mock_auth_user.user_id
+    assert result["message"] == "Category created successfully."
+    assert result["category"].title == "Tech"
+    assert result["category"].created_by == mock_auth_user.user_id
 
-    mock_category_store.create.assert_called_once()
+    mock_category_store.create_category.assert_called_once()
 
-    called_cat = mock_category_store.create.call_args.kwargs["category"]
-
+    called_cat = mock_category_store.create_category.call_args.kwargs["category"]
     assert isinstance(called_cat, Category)
     assert called_cat.title == "Tech"
     assert called_cat.description == "Technology section"
@@ -91,7 +91,9 @@ async def test_create_category_duplicate_title_raises_api_exception(
         version=1,
     )
 
-    mock_category_store.get_by_title = AsyncMock(return_value=existing_category)
+    mock_category_store.get_category_by_title = AsyncMock(
+        return_value=existing_category
+    )
 
     with pytest.raises(ApiException) as exc_info:
         await category_service.create_category(mock_auth_user, dto)
@@ -116,7 +118,7 @@ async def test_get_category_success(
         version=1,
     )
 
-    mock_category_store.get = AsyncMock(return_value=existing_category)
+    mock_category_store.get_category = AsyncMock(return_value=existing_category)
 
     result = await category_service.get_category(
         mock_auth_user,
@@ -126,14 +128,14 @@ async def test_get_category_success(
     assert result.category_id == category_id
     assert result.title == "HR"
 
-    mock_category_store.get.assert_called_once_with(category_id=category_id)
+    mock_category_store.get_category.assert_called_once_with(category_id=category_id)
 
 
 @pytest.mark.asyncio
 async def test_get_category_not_found(
     category_service, mock_category_store, mock_auth_user
 ):
-    mock_category_store.get = AsyncMock(return_value=None)
+    mock_category_store.get_category = AsyncMock(return_value=None)
 
     with pytest.raises(ApiException) as exc_info:
         await category_service.get_category(
@@ -171,13 +173,13 @@ async def test_get_all_categories(
         ),
     ]
 
-    mock_category_store.list = AsyncMock(
+    mock_category_store.list_categories = AsyncMock(
         return_value=(mock_categories, len(mock_categories))
     )
 
     results, total = await category_service.get_all_categories(
         mock_auth_user,
-        index_size=0,
+        index_size=1,
         max_result=10,
     )
 
@@ -185,8 +187,8 @@ async def test_get_all_categories(
     assert total == 2
     assert results[0].title == "A"
 
-    mock_category_store.list.assert_called_once_with(
-        index=0,
+    mock_category_store.list_categories.assert_called_once_with(
+        index=1,
         limit=10,
     )
 
@@ -195,14 +197,14 @@ async def test_get_all_categories(
 async def test_update_category_success(
     category_service, mock_category_store, mock_auth_user
 ):
+    category_id = "uuid-999"
     dto = UpdateCategoryDTO(
-        category_id="uuid-999",
         title="New Title",
         description="New Desc",
     )
 
     existing_category = Category(
-        category_id=dto.category_id,
+        category_id=category_id,
         title="Old Title",
         description="Old Desc",
         created_by="other-user",
@@ -212,19 +214,20 @@ async def test_update_category_success(
         version=1,
     )
 
-    mock_category_store.get = AsyncMock(return_value=existing_category)
-    mock_category_store.get_by_title = AsyncMock(return_value=None)
-    mock_category_store.update = AsyncMock(return_value=existing_category)
+    mock_category_store.get_category = AsyncMock(return_value=existing_category)
+    mock_category_store.get_category_by_title = AsyncMock(return_value=None)
+    mock_category_store.update_category = AsyncMock(return_value=existing_category)
 
-    await category_service.update_category(
+    result = await category_service.update_category(
         mock_auth_user,
+        category_id,
         dto,
     )
 
-    mock_category_store.update.assert_called_once()
+    assert result["message"] == "Category updated successfully."
+    mock_category_store.update_category.assert_called_once()
 
-    updated_cat = mock_category_store.update.call_args.kwargs["category"]
-
+    updated_cat = mock_category_store.update_category.call_args.kwargs["category"]
     assert updated_cat.title == "New Title"
     assert updated_cat.description == "New Desc"
     assert updated_cat.updated_by == mock_auth_user.user_id
@@ -235,16 +238,16 @@ async def test_update_category_not_found(
     category_service, mock_category_store, mock_auth_user
 ):
     dto = UpdateCategoryDTO(
-        category_id="missing-id",
         title="Title",
         description="Desc",
     )
 
-    mock_category_store.get = AsyncMock(return_value=None)
+    mock_category_store.get_category = AsyncMock(return_value=None)
 
     with pytest.raises(ApiException) as exc_info:
         await category_service.update_category(
             mock_auth_user,
+            "missing-id",
             dto,
         )
 
@@ -268,15 +271,16 @@ async def test_delete_category_success(
         version=1,
     )
 
-    mock_category_store.get = AsyncMock(return_value=existing_category)
-    mock_category_store.delete = AsyncMock()
+    mock_category_store.get_category = AsyncMock(return_value=existing_category)
+    mock_category_store.delete_category = AsyncMock()
 
-    await category_service.delete_category(
+    result = await category_service.delete_category(
         mock_auth_user,
         category_id,
     )
 
-    mock_category_store.delete.assert_called_once_with(category_id=category_id)
+    assert result["message"] == "Category deleted successfully."
+    mock_category_store.delete_category.assert_called_once_with(category_id=category_id)
 
 
 @pytest.mark.asyncio
@@ -285,7 +289,7 @@ async def test_delete_category_not_found(
 ):
     category_id = "missing-id"
 
-    mock_category_store.get = AsyncMock(return_value=None)
+    mock_category_store.get_category = AsyncMock(return_value=None)
 
     with pytest.raises(ApiException) as exc_info:
         await category_service.delete_category(

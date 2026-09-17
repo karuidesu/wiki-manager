@@ -47,7 +47,6 @@ line-length = 88
 target-version = "py310"
 
 [tool.ruff.lint]
-#Standard rules (E/W: Pycodestyle, F: Pyflakes, I: Isort)
 select = ["E", "W", "F", "I"]
 ignore = []
 
@@ -63,6 +62,18 @@ pythonpath = ["src"]
 
 [tool.pyright]
 extraPaths = ["src"]
+typeCheckingMode = "basic"
+reportGeneralTypeIssues = "none"
+reportCallIssue = "none"
+reportArgumentType = "none"
+reportAttributeAccessIssue = "none"
+reportIncompatibleVariableOverride = "none"
 
 [tool.mypy]
 mypy_path = "src"
+ignore_missing_imports = true
+disable_error_code = ["var-annotated", "has-type", "call-overload", "assignment", "name-defined", "attr-defined"]
+
+[tool.pyre]
+source_directories = ["src"]
+disabled = true

@@ -20,7 +20,7 @@ class CategoryStore(ICategory):
     def __init__(self, database_manager: DataBaseManager):
         self._database_manager = database_manager
 
-    async def create(self, category: Category) -> CategoryResponseDTO:
+    async def create_category(self, category: Category) -> CategoryResponseDTO:
         category_iqb = InsertQueryBuilder(Category)
         category_sql, category_cols = category_iqb.sql_query()
 
@@ -41,21 +41,21 @@ class CategoryStore(ICategory):
             async with connection.transaction():
                 await connection.execute(category_sql, *category_row)
 
-        inserted_category = await self.get(category.category_id)
+        inserted_category = await self.get_category(category.category_id)
 
         if inserted_category is None:
             raise RuntimeError("Failed to retrieve inserted category.")
 
         return inserted_category
 
-    async def get(self, category_id: str) -> Optional[CategoryResponseDTO]:
+    async def get_category(self, category_id: str) -> Optional[CategoryResponseDTO]:
         async with self._database_manager.connection_pool.acquire() as connection:
             async with connection.transaction():
                 category_sql, category_params = SelectQueryBuilder(
                     model_cls=Category,
                     where_clauses={"category_id": category_id},
                     limit=1,
-                ).build_query()
+                ).sql_query()
 
                 category_row = await connection.fetchrow(
                     category_sql,
@@ -69,14 +69,14 @@ class CategoryStore(ICategory):
                     category_row=dict(category_row)
                 )
 
-    async def get_by_title(self, title: str) -> Optional[CategoryResponseDTO]:
+    async def get_category_by_title(self, title: str) -> Optional[CategoryResponseDTO]:
         async with self._database_manager.connection_pool.acquire() as connection:
             async with connection.transaction():
                 category_sql, category_params = SelectQueryBuilder(
                     model_cls=Category,
                     where_clauses={"title": title},
                     limit=1,
-                ).build_query()
+                ).sql_query()
 
                 category_row = await connection.fetchrow(
                     category_sql,
@@ -90,7 +90,26 @@ class CategoryStore(ICategory):
                     category_row=dict(category_row)
                 )
 
-    async def list(
+    async def get_categories_by_ids(
+        self, category_ids: list[str]
+    ) -> list[CategoryResponseDTO]:
+        if not category_ids:
+            return []
+
+        async with self._database_manager.connection_pool.acquire() as connection:
+            async with connection.transaction():
+                sql = """
+                    SELECT * FROM categories
+                    WHERE category_id = ANY($1)
+                """
+                rows = await connection.fetch(sql, category_ids)
+
+                return [
+                    self.parse_category_response_kwargs(category_row=dict(row))
+                    for row in rows
+                ]
+
+    async def list_categories(
         self,
         index: int = 0,
         limit: int = 20,
@@ -106,7 +125,8 @@ class CategoryStore(ICategory):
                 count_sql, count_params = SelectQueryBuilder(
                     model_cls=Category,
                     selected_columns=["COUNT(1)::bigint AS total"],
-                ).build_query()
+                    allow_expressions=True,
+                ).sql_query()
 
                 total = int(await conn.fetchval(count_sql, *count_params) or 0)
 
@@ -119,7 +139,7 @@ class CategoryStore(ICategory):
                     order_dir="DESC",
                     limit=limit,
                     offset=offset,
-                ).build_query()
+                ).sql_query()
 
                 rows = await conn.fetch(category_sql, *category_params)
 
@@ -131,7 +151,9 @@ class CategoryStore(ICategory):
                     total,
                 )
 
-    async def update(self, category: Category) -> CategoryResponseDTO:
+    async def update_category(
+        self, category: Category, category_id: str
+    ) -> CategoryResponseDTO:
 
         updated_fields = [
             "title",
@@ -164,14 +186,14 @@ class CategoryStore(ICategory):
             async with conn.transaction():
                 await conn.execute(category_sql, *params)
 
-        updated_category = await self.get(category.category_id)
+        updated_category = await self.get_category(category_id)
 
         if updated_category is None:
             raise RuntimeError("Failed to retrieve updated category.")
 
         return updated_category
 
-    async def delete(self, category_id: str) -> None:
+    async def delete_category(self, category_id: str) -> None:
         async with self._database_manager.connection_pool.acquire() as connection:
             async with connection.transaction():
 
@@ -212,6 +234,7 @@ class CategoryStore(ICategory):
             title=category_row["title"],
             description=category_row.get("description"),
             created_by=category_row["created_by"],
+            # pyrefly: ignore [bad-argument-type]
             created_at=created_at,
             updated_by=category_row.get("updated_by"),
             updated_at=updated_at,

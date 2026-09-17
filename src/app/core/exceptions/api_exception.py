@@ -1,19 +1,28 @@
-class ApiErrorsCode:
-    CATEGORY_FORM_NOT_CORRECT = 8000
-    CATEGORY_NOT_FOUND = 2001
-    CATEGORY_ALREADY_EXISTS = 2000
-    USER_NOT_FOUND = 1000
-    USER_ALREADY_EXISTS = 1001
-    ROLE = 2000
-    RESOURCE_ACCESS_DENIED = 9000
-    MEDIA_NOT_FOUND = 1000
-    MAX_MEDIA_SIZE = 1001
-    INVALID_MEDIA_TYPE = 1002
-    FORBIDDEN = 1003
-    INVALID_ARTICLE_TRANSITION = 1004
-    INVALID_ARTICLE_STATE = 1005
-    ARTICLE_NOT_FOUND = 1006
-    ARTICLE_ALREADY_EXISTS = 1007
+from enum import IntEnum
+
+
+class ApiErrorsCode(IntEnum):
+    USER_ALREADY_EXISTS = 1000
+    USER_NOT_FOUND = 1001
+    FORBIDDEN = 1002
+    RESOURCE_ACCESS_DENIED = 1003
+    ROLE_NOT_FOUND = 1004
+
+    MAX_MEDIA_SIZE = 2000
+    MEDIA_NOT_FOUND = 2001
+    INVALID_MEDIA_TYPE = 2002
+
+    CATEGORY_ALREADY_EXISTS = 3000
+    CATEGORY_NOT_FOUND = 3001
+    INVALID_CATEGORY_FORM = 3002
+
+    ARTICLE_ALREADY_EXISTS = 4000
+    ARTICLE_NOT_FOUND = 4001
+    INVALID_ARTICLE_STATE = 4002
+    INVALID_ARTICLE_TRANSITION = 4003
+
+    COMMENT_NOT_FOUND = 5000
+    REACTION_NOT_FOUND = 5001
 
 
 class ApiException(Exception):
@@ -37,4 +46,4 @@ class ApiException(Exception):
 
     @staticmethod
     def server_internal_error() -> dict:
-        return {"error_code": 500, "message": "internal server error"}
+        return {"error_code": 500, "message": "Internal server error"}

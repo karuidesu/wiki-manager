@@ -20,4 +20,3 @@ class AuditMixin(SQLModel):
         nullable=True,
     )
     version: int = Field(default=1, nullable=False)
-    id: Optional[int] = Field(default=None, primary_key=True, index=True, exclude=True)

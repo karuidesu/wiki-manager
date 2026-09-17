@@ -24,13 +24,15 @@ def mock_auth_user():
 
 @pytest.fixture
 def mock_article_store():
-    store = MagicMock(spec=IArticle)
-    return store
+    return MagicMock(spec=IArticle)
 
 
 @pytest.fixture
 def mock_category_store():
-    return MagicMock()
+    store = MagicMock()
+    # Ensure category fetching can be awaited in create_article
+    store.get_categories_by_ids = AsyncMock(return_value=[])
+    return store
 
 
 @pytest.fixture
@@ -61,7 +63,7 @@ def test_article_store_implements_iarticle():
 
 @pytest.mark.asyncio
 async def test_create_article_success(
-    article_service, mock_article_store, mock_auth_user
+    article_service, mock_article_store, mock_category_store, mock_auth_user
 ):
     dto = CreateArticleDTO(
         title="Introduction to Python",
@@ -80,12 +82,15 @@ async def test_create_article_success(
         version=1,
     )
 
-    mock_article_store.add_article = AsyncMock(return_value=expected_article)
+    mock_category_store.get_categories_by_ids = AsyncMock(
+        return_value=[MagicMock(category_id="uuid-cat-123")]
+    )
+    mock_article_store.create_article = AsyncMock(return_value=expected_article)
 
     result = await article_service.create_article(dto.model_dump(), mock_auth_user)
 
     assert result.title == "Introduction to Python"
-    mock_article_store.add_article.assert_called_once()
+    mock_article_store.create_article.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -104,20 +109,20 @@ async def test_get_article_success(article_service, mock_article_store, mock_aut
         version=1,
     )
 
-    mock_article_store.load_article = AsyncMock(return_value=existing_article)
+    mock_article_store.get_article = AsyncMock(return_value=existing_article)
 
     result = await article_service.get_article(article_id)
 
     assert result.article_id == article_id
     assert result.title == "Advanced Python"
-    mock_article_store.load_article.assert_called_once_with(article_id)
+    mock_article_store.get_article.assert_called_once_with(article_id)
 
 
 @pytest.mark.asyncio
 async def test_get_article_not_found(
     article_service, mock_article_store, mock_auth_user
 ):
-    mock_article_store.load_article = AsyncMock(return_value=None)
+    mock_article_store.get_article = AsyncMock(return_value=None)
 
     with pytest.raises(ApiException) as exc_info:
         await article_service.get_article("unknown-id")
@@ -145,12 +150,13 @@ async def test_delete_article_success(
         is_deleted=False,
     )
 
-    mock_article_store.load_article = AsyncMock(return_value=existing_article)
+    # Fixed: match service call get_article instead of load_article
+    mock_article_store.get_article = AsyncMock(return_value=existing_article)
     mock_article_store.update_article = AsyncMock(return_value=existing_article)
 
     await article_service.delete_article(article_id, mock_auth_user)
 
-    mock_article_store.load_article.assert_called_once_with(article_id)
+    mock_article_store.get_article.assert_called_once_with(article_id)
     mock_article_store.update_article.assert_called_once_with(existing_article)
     assert existing_article.is_deleted is True
 
@@ -161,7 +167,7 @@ async def test_delete_article_not_found(
 ):
     article_id = "missing-id"
 
-    mock_article_store.load_article = AsyncMock(return_value=None)
+    mock_article_store.get_article = AsyncMock(return_value=None)
 
     with pytest.raises(ApiException) as exc_info:
         await article_service.delete_article(article_id, mock_auth_user)
@@ -190,7 +196,7 @@ async def test_publish_article_state_change(
     async def mock_update(article_to_update):
         return article_to_update
 
-    mock_article_store.load_article = AsyncMock(return_value=existing_article)
+    mock_article_store.get_article = AsyncMock(return_value=existing_article)
     mock_article_store.update_article = AsyncMock(side_effect=mock_update)
 
     published_article = await article_service.publish(article_id, mock_auth_user)
