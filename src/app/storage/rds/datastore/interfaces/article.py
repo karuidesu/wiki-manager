@@ -2,6 +2,7 @@ import abc
 from typing import List, Optional
 
 from app.models import Article, ArticleReaction, Comment
+from app.storage.rds.dto.search_options import SearchOptionsDTO
 
 
 class IArticle(abc.ABC):
@@ -87,4 +88,10 @@ class IArticle(abc.ABC):
 
     @abc.abstractmethod
     async def count_comments(self, article_id: str) -> int:
+        pass
+
+    @abc.abstractmethod
+    async def search_articles(
+        self, options: "SearchOptionsDTO"
+    ) -> tuple[list[Article], int]:
         pass

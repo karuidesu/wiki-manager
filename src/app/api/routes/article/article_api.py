@@ -1,7 +1,7 @@
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from starlette.responses import Response
 from starlette.status import (
     HTTP_200_OK,
@@ -20,6 +20,7 @@ from app.api.dto.wiki.wiki_dto import (
 from app.core.exceptions.api_exception import ApiException
 from app.core.json.json_response import ORJSONResponse
 from app.models.security.auth_user import AuthenticatedUser
+from app.models.wiki import Status
 from app.security.authentication_provider import AUTHENTICATION_PROVIDER
 from app.services.factory.services_factory import (
     WIKI_MANAGER_FACTORY,
@@ -83,29 +84,71 @@ async def read_article(
         )
 
 
-@router.get("/list", response_model=Dict[str, Any])
+@router.get("/list", response_model=Dict[str, Any], status_code=HTTP_200_OK)
 async def get_all_articles(
-    page_size: int = 1,
-    max_results: int = 20,
-    direction: str = "DESC",
+    page: int = Query(default=1, ge=1, alias="page_size"),
+    max_results: int = Query(default=20, ge=1, le=100),
+    order_by: str = Query(default="created_at"),
+    direction: str = Query(default="DESC"),
+    tags: Optional[List[str]] = Query(default=None),
+    search: Optional[str] = Query(default=None),
     wiki_services: WikiManagerServices = Depends(WIKI_MANAGER_FACTORY),
     auth_user: AuthenticatedUser = Depends(AUTHENTICATION_PROVIDER),
 ):
     try:
         articles_data = await wiki_services.article_service.get_all_articles(
-            page_size=page_size, max_result=max_results, direction=direction
+            page=page,
+            max_results=max_results,
+            order_by=order_by,
+            direction=direction,
+            tags=tags,
+            search=search,
         )
-        return ORJSONResponse(
-            status_code=HTTP_200_OK,
-            content=articles_data,
-        )
+        return ORJSONResponse(status_code=HTTP_200_OK, content=articles_data)
     except ApiException as exc:
         LOGGER.error(f"Error getting articles list: {exc}")
         return ORJSONResponse(status_code=exc.status_code, content=exc.message)
     except Exception as exc:
         LOGGER.error(f"Unexpected exception: {exc}")
         return ORJSONResponse(
-            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
+            content=ApiException.server_internal_error(),
+        )
+
+
+@router.get("/admin/list", response_model=Dict[str, Any], status_code=HTTP_200_OK)
+async def get_admin_all_articles(
+    page: int = Query(default=1, ge=1),
+    max_results: int = Query(default=20, ge=1, le=100),
+    order_by: str = Query(default="created_at"),
+    direction: str = Query(default="DESC"),
+    state: Optional[Status] = Query(default=None),
+    tags: Optional[List[str]] = Query(default=None),
+    search: Optional[str] = Query(default=None),
+    author_id: Optional[str] = Query(default=None),
+    wiki_services: WikiManagerServices = Depends(WIKI_MANAGER_FACTORY),
+    auth_user: AuthenticatedUser = Depends(AUTHENTICATION_PROVIDER),
+):
+    try:
+        articles_data = await wiki_services.article_service.get_admin_all_articles(
+            auth_user=auth_user,
+            page=page,
+            max_results=max_results,
+            order_by=order_by,
+            direction=direction,
+            state=state,
+            tags=tags,
+            search=search,
+            author_id=author_id,
+        )
+        return ORJSONResponse(status_code=HTTP_200_OK, content=articles_data)
+    except ApiException as exc:
+        LOGGER.error(f"Error getting admin articles list: {exc}")
+        return ORJSONResponse(status_code=exc.status_code, content=exc.message)
+    except Exception as exc:
+        LOGGER.error(f"Unexpected exception: {exc}")
+        return ORJSONResponse(
+            status_code=500,
             content=ApiException.server_internal_error(),
         )
 

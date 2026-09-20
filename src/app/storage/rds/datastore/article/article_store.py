@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import timezone
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.models.wiki.wiki_models import Article, ArticleReaction, Category, Comment
 from app.storage.rds.clients.database_manager import DataBaseManager
@@ -12,8 +12,10 @@ from app.storage.rds.commons.sql_query_builder import (
     UpdateQueryBuilder,
 )
 from app.storage.rds.datastore.interfaces.article import IArticle
+from app.storage.rds.dto.search_options import SearchOptionsDTO
 
 LOGGER = logging.getLogger(__name__)
+ALLOWED_SORT_FIELDS = {"created_at", "updated_at", "title", "status", "id"}
 
 
 class ArticleStore(IArticle):
@@ -282,6 +284,40 @@ class ArticleStore(IArticle):
                 ).sql_query()
 
                 await connection.execute(delete_sql, *delete_params)
+
+    async def search_articles(
+        self, options: SearchOptionsDTO
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        if options.order_by not in ALLOWED_SORT_FIELDS:
+            raise ValueError(
+                f"Unauthorized sort column: '{options.order_by}'."
+                f" Allowed: {ALLOWED_SORT_FIELDS}"
+            )
+
+        builder = self.query_builder().where("is_deleted", "=", False)
+
+        if options.state:
+            builder.where("status", "=", options.state.value)
+
+        if options.user_id:
+            builder.where("author_id", "=", options.user_id)
+
+        if options.search:
+            builder.where_ilike("title", f"%{options.search}%")
+
+        if options.tags:
+            builder.where_json_contains("tags", options.tags)
+
+        total_count = await builder.count()
+
+        items = (
+            await builder.order_by(options.order_by, options.direction)
+            .limit(int(options.max_results))
+            .offset(int(options.offset))
+            .fetch_all()
+        )
+
+        return items, total_count
 
     @classmethod
     def _parse_article_model(cls, *, article_row: dict[str, Any]) -> Article:

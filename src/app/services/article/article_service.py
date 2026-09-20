@@ -1,6 +1,7 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from starlette.status import (
     HTTP_400_BAD_REQUEST,
@@ -21,6 +22,7 @@ from app.security.api_roles import ApiRoles
 from app.storage.rds.datastore.interfaces.article import IArticle
 from app.storage.rds.datastore.interfaces.category import ICategory
 from app.storage.rds.datastore.interfaces.media import IMedia
+from app.storage.rds.dto.search_options import SearchOptionsDTO
 
 LOGGER = logging.getLogger(__name__)
 
@@ -101,26 +103,94 @@ class ArticleService:
 
     async def get_all_articles(
         self,
-        page_size: int = 1,
-        max_result: int = 20,
+        page: int = 1,
+        max_results: int = 20,
+        order_by: str = "created_at",
         direction: str = "DESC",
-    ):
-        LOGGER.info("Get article list")
+        tags: Optional[List[str]] = None,
+        search: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        options = SearchOptionsDTO(
+            page=page,
+            max_results=max_results,
+            order_by=order_by,
+            direction=direction,
+            state=Status.PUBLISHED,
+            tags=tags,
+            search=search,
+        )
         try:
-            result = await self._article_store.get_all_articles(
-                page_index=page_size, max_result=max_result, direction=direction
+            items, total = await self._article_store.search_articles(options)
+        except ValueError as err:
+            raise ApiException(
+                status_code=HTTP_400_BAD_REQUEST,
+                error_code=ApiErrorsCode.INVALID_ARTICLE_STATE,
+                message=str(err),
             )
-            articles_count = await self._article_store.count_articles()
 
-            return {
-                "total": articles_count,
-                "page_size": page_size,
-                "max_result": max_result,
-                "articles": [article.model_dump() for article in result],
-            }
-        except Exception as exc:
-            LOGGER.error("Error while getting article list: %s", str(exc))
-            raise exc
+        return {
+            "items": [
+                article.model_dump() if hasattr(article, "model_dump") else article
+                for article in items
+            ],
+            "total": total,
+            "page": page,
+            "max_results": max_results,
+            "total_pages": (total + max_results - 1) // max_results if total > 0 else 0,
+        }
+
+    async def get_admin_all_articles(
+        self,
+        auth_user: AuthenticatedUser,
+        page: int = 1,
+        max_results: int = 20,
+        order_by: str = "created_at",
+        direction: str = "DESC",
+        state: Optional[Status] = None,
+        tags: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        author_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        user_roles = getattr(auth_user, "roles", [])
+        is_reviewer = any(
+            role in user_roles for role in [ApiRoles.MANAGER, ApiRoles.DIRECTOR]
+        )
+        if not is_reviewer:
+            raise ApiException(
+                status_code=HTTP_403_FORBIDDEN,
+                error_code=ApiErrorsCode.FORBIDDEN,
+                message="Access denied. Reviewer role required.",
+            )
+
+        options = SearchOptionsDTO(
+            page=page,
+            max_results=max_results,
+            order_by=order_by,
+            direction=direction,
+            state=state,
+            tags=tags,
+            search=search,
+            user_id=author_id,
+        )
+        try:
+            items, total = await self._article_store.search_articles(options)
+        except ValueError as err:
+            raise ApiException(
+                status_code=HTTP_400_BAD_REQUEST,
+                error_code=ApiErrorsCode.INVALID_ARTICLE_STATE,
+                message=str(err),
+            )
+
+        return {
+            "items": [
+                article.model_dump() if hasattr(article, "model_dump") else article
+                for article in items
+            ],
+            "total": total,
+            "page": page,
+            "max_results": max_results,
+            "total_pages": (total + max_results - 1) // max_results if total > 0 else 0,
+        }
 
     async def update_article(
         self, article_id: str, payload: dict, auth_user: AuthenticatedUser
