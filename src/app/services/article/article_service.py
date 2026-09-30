@@ -124,7 +124,7 @@ class ArticleService:
         except ValueError as err:
             raise ApiException(
                 status_code=HTTP_400_BAD_REQUEST,
-                error_code=ApiErrorsCode.INVALID_ARTICLE_STATE,
+                error_code=ApiErrorsCode.INVALID_SORT_FIELD,
                 message=str(err),
             )
 
@@ -177,7 +177,7 @@ class ArticleService:
         except ValueError as err:
             raise ApiException(
                 status_code=HTTP_400_BAD_REQUEST,
-                error_code=ApiErrorsCode.INVALID_ARTICLE_STATE,
+                error_code=ApiErrorsCode.INVALID_SORT_FIELD,
                 message=str(err),
             )
 
