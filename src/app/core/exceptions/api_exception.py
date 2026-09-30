@@ -24,6 +24,8 @@ class ApiErrorsCode(IntEnum):
     COMMENT_NOT_FOUND = 5000
     REACTION_NOT_FOUND = 5001
 
+    INVALID_SORT_FIELD = 6000
+
 
 class ApiException(Exception):
     def __init__(self, status_code: int, error_code: int, message: str):

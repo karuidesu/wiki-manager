@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import timezone
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from app.models.wiki.wiki_models import Article, ArticleReaction, Category, Comment
 from app.storage.rds.clients.database_manager import DataBaseManager
@@ -12,8 +12,10 @@ from app.storage.rds.commons.sql_query_builder import (
     UpdateQueryBuilder,
 )
 from app.storage.rds.datastore.interfaces.article import IArticle
+from app.storage.rds.dto.search_options import SearchOptionsDTO
 
 LOGGER = logging.getLogger(__name__)
+ALLOWED_SORT_FIELDS = {"created_at", "updated_at", "title", "state"}
 
 
 class ArticleStore(IArticle):
@@ -282,6 +284,77 @@ class ArticleStore(IArticle):
                 ).sql_query()
 
                 await connection.execute(delete_sql, *delete_params)
+
+    async def search_articles(
+        self, options: SearchOptionsDTO
+    ) -> Tuple[List[Article], int]:
+        if options.order_by not in ALLOWED_SORT_FIELDS:
+            raise ValueError(
+                f"Unauthorized sort column: '{options.order_by}'."
+                f" Allowed: {ALLOWED_SORT_FIELDS}"
+            )
+
+        where_parts = ["is_deleted = FALSE"]
+        params = []
+
+        if options.state:
+            params.append(options.state.value)
+            where_parts.append(f"state = ${len(params)}")
+
+        if options.user_id:
+            params.append(options.user_id)
+            where_parts.append(f"user_id = ${len(params)}")
+
+        if options.search:
+            params.append(f"%{options.search}%")
+            where_parts.append(f"title ILIKE ${len(params)}")
+
+        if options.tags:
+            params.append(json.dumps(options.tags))
+            where_parts.append(f"tags::jsonb @> ${len(params)}::jsonb")
+
+        where_clause = " AND ".join(where_parts)
+        count_sql = f"SELECT COUNT(1) FROM articles WHERE {where_clause}"
+
+        order_dir = "ASC" if options.direction.upper() == "ASC" else "DESC"
+
+        params.append(int(options.max_results))
+        limit_idx = len(params)
+        params.append(int(options.offset))
+        offset_idx = len(params)
+
+        select_sql = (
+            f"SELECT * FROM articles WHERE {where_clause} "
+            f"ORDER BY {options.order_by} {order_dir} "
+            f"LIMIT ${limit_idx} OFFSET ${offset_idx}"
+        )
+
+        async with self._database_manager.connection_pool.acquire() as conn:
+            if len(params) > 2:
+                total_count = await conn.fetchval(count_sql, *params[:-2])
+            else:
+                total_count = await conn.fetchval(count_sql)
+
+            total_count = int(total_count or 0)
+            rows = await conn.fetch(select_sql, *params)
+
+            items = []
+            for row in rows:
+                art = self._parse_article_model(article_row=dict(row))
+                cat_rows = await conn.fetch(
+                    """
+                    SELECT c.*
+                    FROM categories c
+                    JOIN article_categories ac
+                    ON c.category_id = ac.category_id
+                    WHERE ac.article_id = $1
+                    """,
+                    art.article_id,
+                )
+                art.categories = [Category(**dict(r)) for r in cat_rows]
+                items.append(art)
+
+        return items, total_count
 
     @classmethod
     def _parse_article_model(cls, *, article_row: dict[str, Any]) -> Article:
